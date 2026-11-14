@@ -122,6 +122,7 @@ input[type=range]{width:100%; accent-color:var(--accent)}
 .askrow[hidden]{display:none}
 .askrow input{flex:1; min-width:0; min-height:44px; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:0 16px}
 .btn-icon{flex:none; width:44px; height:44px; border-radius:50%; border:1px solid var(--line); background:var(--bg); color:var(--fg); display:grid; place-items:center}
+.btn-icon.off{opacity:.55}
 .btn-icon.on{background:#E5484D; border-color:#E5484D; color:#fff; box-shadow:0 0 0 5px rgba(229,72,77,.22)}
 .btn:disabled{opacity:.5; cursor:default}
 .ccn{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
@@ -719,15 +720,26 @@ Answer with JSON only, exactly this shape: {"reply": "what you say", "mood": "wa
     dictFinal = ''; dictLive = ''; askIn.value = '';
     if (q) { lastSent = norm(lastSent + ' ' + q); askTutu(q); }
   }
+  /* the mic stays visible; if it cannot work, tapping it says why and how to fix it */
+  function micProblem(code) {
+    if (code === 'not_granted' || code === 'not-allowed' || code === 'service-not-allowed')
+      return 'The microphone is blocked for this page. Allow it in the site settings (the icon beside the address), then tap the mic again.';
+    if (code === 'audio-capture') return 'No microphone was found. Plug one in or check your sound settings, then tap the mic again.';
+    if (code === 'network') return 'Speech recognition needs an internet connection. Reconnect and tap the mic again.';
+    if (code === 'unsupported') return 'This browser has no speech recognition. Open Tutu in Chrome, Edge or Safari to talk, or type instead.';
+    return 'The mic could not start' + (code ? ' (' + code + ')' : '') + '. Tap it to try again, or type instead.';
+  }
   micBtn.addEventListener('click', () => {
-    if (!DICT) return;
+    if (!DICT) { micBtn.classList.add('off'); hintEl.textContent = micProblem('unsupported'); return; }
+    micBtn.classList.remove('off');
     if (listening) { DICT.stop().catch(() => {}).then(() => { sendTimer = setTimeout(sendCaptured, 250); }); return; }
     stop(true);
     clearTimeout(sendTimer);
     dictFinal = ''; dictLive = ''; askIn.value = ''; capturing = true;
     DICT.start().catch((e) => {
       capturing = false;
-      if (e && e.code === 'not_granted') { micBtn.hidden = true; hintEl.textContent = 'Microphone is off, so type to Tutu instead.'; }
+      micBtn.classList.add('off');
+      hintEl.textContent = micProblem(e && e.code);
     });
   });
 
@@ -741,7 +753,8 @@ Answer with JSON only, exactly this shape: {"reply": "what you say", "mood": "wa
         return new Promise((res, rej) => {
           rec = new R();
           rec.lang = navigator.language || 'en-IE'; rec.interimResults = true; rec.continuous = true;
-          rec.onstart = () => { onS({ state: 'listening' }); res(); };
+          let started = false, failed = '';
+          rec.onstart = () => { started = true; onS({ state: 'listening' }); res(); };
           rec.onresult = (e) => {
             let live = '';
             for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -750,8 +763,17 @@ Answer with JSON only, exactly this shape: {"reply": "what you say", "mood": "wa
             }
             onP({ text: live });
           };
-          rec.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') rej({ code: 'not_granted' }); };
-          rec.onend = () => { rec = null; onS({ state: 'idle', reason: 'stopped' }); if (done) { done(); done = null; } };
+          rec.onerror = (e) => {
+            const code = (e.error === 'not-allowed' || e.error === 'service-not-allowed') ? 'not_granted' : e.error;
+            if (code === 'no-speech' || code === 'aborted') return;
+            if (!started) rej({ code }); else { failed = code; micBtn.classList.add('off'); hintEl.textContent = micProblem(code); }
+          };
+          rec.onend = () => {
+            rec = null;
+            if (!started) rej({ code: failed || 'unknown' });
+            onS({ state: 'idle', reason: failed || 'stopped' });
+            if (done) { done(); done = null; }
+          };
           try { rec.start(); } catch (err) { rej(err); }
         });
       },
@@ -776,14 +798,14 @@ Answer with JSON only, exactly this shape: {"reply": "what you say", "mood": "wa
       populate();
     }
     if (DICT) {
-      micBtn.hidden = false;
+      micBtn.classList.remove('off');
       DICT.onPartial(({ text }) => { if (!capturing) return; dictLive = text || ''; showDictation(); });
       DICT.onFinal(({ text }) => { if (!capturing) return; dictFinal = norm(dictFinal + ' ' + (text || '')); dictLive = ''; showDictation(); });
       DICT.onState(({ state, reason }) => {
         const was = listening;
         listening = state === 'listening';
         micBtn.classList.toggle('on', listening); micBtn.setAttribute('aria-pressed', String(listening));
-        hintEl.textContent = listening ? 'Listening… tap the mic again when you are done.' : hintText();
+        hintEl.textContent = listening ? 'Listening… tap the mic again when you are done.' : (micBtn.classList.contains('off') ? hintEl.textContent : hintText());
         if (was && !listening && capturing) {
           if (reason === 'hidden') { capturing = false; return; }
           clearTimeout(sendTimer); sendTimer = setTimeout(sendCaptured, 400);
@@ -791,6 +813,8 @@ Answer with JSON only, exactly this shape: {"reply": "what you say", "mood": "wa
       });
     }
     form.hidden = false;
+    micBtn.hidden = false;
+    if (!DICT) micBtn.classList.add('off');
     hintEl.textContent = hintText();
     const inClaude = !!(window.claude && typeof window.claude.use === 'function');
     if (!SAMPLE && !inClaude && KERNEL_URL) {
