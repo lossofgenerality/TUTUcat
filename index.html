@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>
+/* Hardwired CCN Cloud settings (same shape as Laplacian Lab). The key is entered on the page. */
+window.LAPLACIAN_LAB_CONFIG = window.LAPLACIAN_LAB_CONFIG || {
+  MODEL: "claude-sonnet-5-5",
+  WOLFRAM_URL: "https://www.wolframcloud.com/obj/ccn2/TUTUKernel"
+};
+/* Tutu's default voice, the same order on every device. The first name found on the device wins;
+   phones and browsers each ship different voices, so this list covers Apple, Windows, Chrome and Android. */
+window.TUTU_VOICE = window.TUTU_VOICE || {
+  PITCH: 1.35,
+  RATE: 1.0,
+  CLOUD_VOICE: "airy",
+  PREFER: ["Moira", "Microsoft Emily", "Google UK English Female", "Microsoft Sonia", "Microsoft Libby",
+           "Samantha", "Karen", "Tessa", "Serena", "Kate", "Martha", "Microsoft Aria", "Microsoft Jenny",
+           "Google US English", "Microsoft Zira", "en-gb-x-gba", "en-gb-x-gbc", "English (United Kingdom)", "English United Kingdom"]
+};
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tutu Cat</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#5E44B8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#110E19" media="(prefers-color-scheme: dark)">
+<meta name="description" content="A squishy ginger maths cat who talks, listens and wobbles on a discrete Laplacian.">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tutu Cat">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: a big square stage holding one floating jelly cat face on the left, a script console on the right; stacks on phones. */
+:root{
+  --bg:#F1EEF6; --surface:#FFFFFF; --fg:#1D1830; --muted:#5D567A; --line:#DCD6EA;
+  --accent:#5E44B8; --accent-fg:#FFFFFF;
+  --stage-a:#F3EEFB; --stage-b:#CDBFE9; --ring:#7C61D6; --hl:#FFD36E; --hl-fg:#241A02;
+  --display:"Fredoka","Trebuchet MS",system-ui,sans-serif;
+  --body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#110E19; --surface:#1B1727; --fg:#ECE8F6; --muted:#A79FC3; --line:#2F2942;
+    --accent:#B7A3FF; --accent-fg:#160F2A;
+    --stage-a:#2E2546; --stage-b:#110D1C; --ring:#B7A3FF; --hl:#FFD36E; --hl-fg:#241A02;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#110E19; --surface:#1B1727; --fg:#ECE8F6; --muted:#A79FC3; --line:#2F2942;
+  --accent:#B7A3FF; --accent-fg:#160F2A;
+  --stage-a:#2E2546; --stage-b:#110D1C; --ring:#B7A3FF; --hl:#FFD36E; --hl-fg:#241A02;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0;
+  background:var(--bg); color:var(--fg); font-family:var(--body); font-size:15px; line-height:1.5;
+  padding-top:max(24px, env(safe-area-inset-top, 0px));
+  padding-bottom:max(40px, env(safe-area-inset-bottom, 0px));
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden]{display:none!important}
+.studio{max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:24px; align-items:start}
+@media (max-width:880px){ .studio{grid-template-columns:minmax(0,1fr)} }
+
+.stage{position:relative; width:100%; max-width:100%; aspect-ratio:1/1; border-radius:28px; overflow:hidden; background:var(--stage-b)}
+.stage canvas{display:block; width:100%; height:100%; touch-action:none}
+.pill{position:absolute; top:14px; left:14px; display:flex; align-items:center; gap:8px; padding:6px 12px 6px 10px; border-radius:999px; background:rgba(20,14,36,.62); color:#F5F2FC; font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase}
+.pill i{width:8px; height:8px; border-radius:50%; background:#9A92B5}
+body.is-speaking .pill i{background:#FFB36E; box-shadow:0 0 0 4px rgba(255,179,110,.28)}
+.caption{position:absolute; left:16px; right:16px; bottom:16px; padding:12px 16px; border-radius:16px; background:rgba(20,14,36,.66); color:#F7F4FD; font-family:var(--display); font-size:clamp(15px, 2.3vw, 19px); line-height:1.4; font-weight:500; text-wrap:balance; max-height:36%; overflow:auto}
+.caption span{border-radius:6px; padding:0 2px; transition:background-color .08s}
+.caption span.on{background:var(--hl); color:var(--hl-fg)}
+.caption:empty{display:none}
+
+/* Stacked view: Tutu shrinks to a sticky strip so she stays in view while the controls scroll beneath her. */
+@media (max-width:880px){
+  .stage{position:sticky; top:max(8px, env(safe-area-inset-top, 0px)); z-index:5; aspect-ratio:auto; height:clamp(200px, 36vh, 320px); border-radius:22px; box-shadow:0 10px 28px -12px rgba(20,14,36,.45)}
+  .pill{top:10px; left:10px; padding:4px 10px 4px 8px; font-size:11px}
+  .caption{left:10px; right:10px; bottom:10px; padding:8px 12px; border-radius:12px; font-size:15px; max-height:30%}
+}
+
+.console{background:var(--surface); border:1px solid var(--line); border-radius:24px; padding:24px; display:flex; flex-direction:column; gap:20px; min-width:0}
+.install{margin-left:8px; font:inherit; letter-spacing:.06em; text-transform:uppercase; color:var(--accent-fg); background:var(--accent); border:0; border-radius:999px; padding:3px 10px; cursor:pointer}
+.eyebrow{margin:0; font-size:12px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--accent)}
+h1{margin:4px 0 0; font-family:var(--display); font-weight:700; font-size:clamp(30px,4vw,42px); line-height:1.05; text-wrap:balance}
+.kanji{margin:6px 0 0; font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP","Noto Sans CJK JP",sans-serif; font-weight:700; font-size:clamp(22px,3vw,30px); line-height:1.1; letter-spacing:.04em; color:var(--accent)}
+.kanji b{color:var(--fg); font-weight:700}
+.lede{margin:8px 0 0; color:var(--muted); max-width:46ch}
+label, legend{font-size:13px; font-weight:600; color:var(--fg)}
+.field{display:flex; flex-direction:column; gap:8px; min-width:0}
+textarea{width:100%; min-height:110px; resize:vertical; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:12px 14px}
+.row{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+.hint{font-size:12px; color:var(--muted)}
+button{font:inherit; cursor:pointer}
+.btn{min-height:44px; padding:0 22px; border-radius:999px; border:1px solid transparent; font-weight:600}
+.btn-primary{background:var(--accent); color:var(--accent-fg); font-family:var(--display); font-size:16px}
+.btn-primary:hover{filter:brightness(1.08)}
+.btn-ghost{background:transparent; color:var(--fg); border-color:var(--line)}
+.btn-ghost:disabled{opacity:.45; cursor:default}
+.chips{display:flex; flex-wrap:wrap; gap:8px}
+.chip{min-height:36px; padding:6px 13px; border-radius:999px; border:1px solid var(--line); background:var(--bg); color:var(--fg); font-size:13px; text-align:left}
+.chip:hover{border-color:var(--accent)}
+fieldset{border:0; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; min-width:0}
+.seg{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:4px; gap:4px}
+.seg input{position:absolute; opacity:0; pointer-events:none}
+.seg label{display:flex; align-items:center; justify-content:center; min-height:38px; border-radius:999px; font-weight:500; color:var(--muted); cursor:pointer}
+.seg input:checked + label{background:var(--surface); color:var(--fg); font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.seg input:focus-visible + label{outline:2px solid var(--accent); outline-offset:1px}
+select{width:100%; min-height:44px; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:0 12px}
+.sliders{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px}
+.slider{display:flex; flex-direction:column; gap:6px; min-width:0}
+.slider .top{display:flex; justify-content:space-between; gap:8px}
+.slider output{font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums}
+input[type=range]{width:100%; accent-color:var(--accent)}
+.talk .log{display:flex; flex-direction:column; gap:8px; max-height:240px; overflow:auto; scroll-behavior:smooth}
+.talk .log:empty{display:none}
+.msg{max-width:88%; padding:9px 13px; border-radius:16px; line-height:1.4; overflow-wrap:anywhere}
+.msg.me{align-self:flex-end; background:var(--accent); color:var(--accent-fg); border-bottom-right-radius:6px}
+.msg.tutu{align-self:flex-start; background:var(--bg); border:1px solid var(--line); border-bottom-left-radius:6px; font-family:var(--display); font-weight:500}
+.msg.wait{color:var(--muted)}
+.askrow{display:flex; gap:8px; align-items:center}
+.askrow[hidden]{display:none}
+.askrow input{flex:1; min-width:0; min-height:44px; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:0 16px}
+.btn-icon{flex:none; width:44px; height:44px; border-radius:50%; border:1px solid var(--line); background:var(--bg); color:var(--fg); display:grid; place-items:center}
+.btn-icon.off{opacity:.55}
+.btn-icon.on{background:#E5484D; border-color:#E5484D; color:#fff; box-shadow:0 0 0 5px rgba(229,72,77,.22)}
+.btn:disabled{opacity:.5; cursor:default}
+.ccn{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.ccn[hidden]{display:none}
+.ccn input[type=password]{flex:1; min-width:160px; min-height:40px; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:0 14px}
+.ccn .btn{min-height:40px}
+.ccn-keep{display:flex; align-items:center; gap:6px; font-weight:500}
+.status{margin:0; font-size:13px; color:var(--muted); border-top:1px solid var(--line); padding-top:14px}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+</style>
+</head>
+<body>
+
+<main class="studio">
+  <section class="stage" aria-label="Stage">
+    <canvas id="cat" role="img" aria-label="Tutu as a round, jelly-like ginger cat face with big sparkly anime eyes, who talks in time with the words"></canvas>
+    <div class="pill" aria-hidden="true"><i></i><span id="pillText">Idle</span></div>
+    <div class="caption" id="caption" aria-hidden="true"></div>
+  </section>
+
+  <section class="console" aria-labelledby="title">
+    <div>
+      <p class="eyebrow">Blobby cat edition <button class="install" id="installBtn" type="button">Install app</button></p>
+      <h1 id="title">Give Tutu a line</h1>
+      <p class="kanji" lang="ja" title="Tutu-neko: Tutu cat">トゥトゥ<b>猫</b></p>
+      <p class="lede">A squishy ginger cat face that reads your text aloud, wobbles on every word, blinks, twitches her ears and watches your pointer.</p>
+    </div>
+
+    <section class="field talk" aria-labelledby="talkTitle">
+      <label id="talkTitle" for="ask">Talk to Tutu</label>
+      <div class="log" id="log" aria-live="polite"></div>
+      <form class="askrow" id="askForm" hidden>
+        <button type="button" class="btn-icon" id="mic" aria-label="Talk out loud" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg></button>
+        <input id="ask" type="text" placeholder="Say hi, or ask Tutu anything…" autocomplete="off" enterkeyhint="send">
+        <button class="btn btn-primary" type="submit" id="send">Send</button>
+      </form>
+      <form class="ccn" id="ccnForm" hidden>
+        <input id="ccnKey" type="password" placeholder="CCN Cloud key" autocomplete="off" aria-label="CCN Cloud key">
+        <button class="btn btn-ghost" type="submit" id="ccnGo">Connect</button>
+        <label class="hint ccn-keep"><input type="checkbox" id="ccnKeep"> Remember on this device</label>
+      </form>
+      <div class="row"><button class="btn btn-ghost" type="button" id="surprise">Let Tutu talk</button><span class="hint" id="talkHint">Waking Tutu up…</span></div>
+    </section>
+
+    <div class="field">
+      <label for="script">Script</label>
+      <textarea id="script" spellcheck="true">Hi! I'm Tutu, the blobby cat. Type anything here and I'll say it out loud, wobbling as I go.</textarea>
+      <div class="row">
+        <button class="btn btn-primary" id="speak" type="button">Speak</button>
+        <button class="btn btn-ghost" id="stop" type="button" disabled>Stop</button>
+        <span class="hint">Ctrl + Enter also speaks</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="hint" id="samplesLabel">Try a sample</span>
+      <div class="chips" role="group" aria-labelledby="samplesLabel">
+        <button class="chip" type="button" data-line="The Laplacian adds up how a function curves in every direction at once." data-mood="neutral">The Laplacian, in one line</button>
+        <button class="chip" type="button" data-line="Wait, is that a fish? Is it for me?" data-mood="curious">A question</button>
+        <button class="chip" type="button" data-line="Yay! Best day ever! Thank you so much!" data-mood="warm">Delighted</button>
+        <button class="chip" type="button" data-line="No. Get off my cushion. Right now." data-mood="stern">Grumpy</button>
+      </div>
+    </div>
+
+    <fieldset>
+      <legend>Mood</legend>
+      <div class="seg">
+        <input type="radio" name="mood" id="m-warm" value="warm" checked><label for="m-warm">Happy</label>
+        <input type="radio" name="mood" id="m-neutral" value="neutral"><label for="m-neutral">Calm</label>
+        <input type="radio" name="mood" id="m-curious" value="curious"><label for="m-curious">Curious</label>
+        <input type="radio" name="mood" id="m-stern" value="stern"><label for="m-stern">Grumpy</label>
+      </div>
+    </fieldset>
+
+    <div class="field">
+      <label for="voice">Voice</label>
+      <select id="voice"><option value="mime">Loading voices…</option></select>
+    </div>
+
+    <div class="sliders">
+      <div class="slider">
+        <div class="top"><label for="rate">Speed</label><output id="rateOut" for="rate">1.00×</output></div>
+        <input type="range" id="rate" min="0.7" max="1.4" step="0.05" value="1">
+      </div>
+      <div class="slider">
+        <div class="top"><label for="pitch">Pitch</label><output id="pitchOut" for="pitch">1.35</output></div>
+        <input type="range" id="pitch" min="0.6" max="2" step="0.05" value="1.35">
+      </div>
+    </div>
+
+    <div class="row"><button class="btn btn-ghost" type="button" id="voiceReset">Default voice</button><span class="hint">Your voice, speed and pitch are remembered on this device.</span></div>
+
+    <p class="status" id="status" aria-live="polite">Ready. Press Speak to hear Tutu.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const canvas = $('#cat'), ctx = canvas.getContext('2d');
+  const ta = $('#script'), speakBtn = $('#speak'), stopBtn = $('#stop'), voiceSel = $('#voice');
+  const rateIn = $('#rate'), pitchIn = $('#pitch'), rateOut = $('#rateOut'), pitchOut = $('#pitchOut');
+  const statusEl = $('#status'), capEl = $('#caption'), pillText = $('#pillText');
+
+  const rm = matchMedia('(prefers-reduced-motion: reduce)');
+  let motion = rm.matches ? 0.4 : 1;
+  rm.addEventListener && rm.addEventListener('change', (e) => { motion = e.matches ? 0.4 : 1; });
+
+  /* ---------- canvas sizing (logical 600 x 600) ---------- */
+  let S = 1, OX = 0, OY = 0;
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    if (!r.width) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(r.width * dpr);
+    canvas.height = Math.round(r.height * dpr);
+    S = Math.min(canvas.width, canvas.height) / 600;
+    OX = (canvas.width - 600 * S) / 2;
+    OY = (canvas.height - 600 * S) / 2;
+  }
+  new ResizeObserver(resize).observe(canvas);
+  resize();
+
+  const tok = {};
+  function readTok() {
+    const cs = getComputedStyle(document.documentElement);
+    tok.a = cs.getPropertyValue('--stage-a').trim() || '#F3EEFB';
+    tok.b = cs.getPropertyValue('--stage-b').trim() || '#CDBFE9';
+    tok.ring = cs.getPropertyValue('--ring').trim() || '#7C61D6';
+  }
+  readTok();
+  const dm = matchMedia('(prefers-color-scheme: dark)');
+  dm.addEventListener && dm.addEventListener('change', readTok);
+  new MutationObserver(readTok).observe(document.documentElement, { attributes: true });
+
+  /* ---------- cat palette (fixed) ---------- */
+  const C = {
+    furL: '#FFD9B0', fur: '#FFB070', furD: '#EE8C4B', line: '#B9632E', stripe: '#D9773A',
+    earIn: '#FFC2CF', muzzle: '#FFF2E3', nose: '#F27691', mouthLine: '#7A3526',
+    cavity: '#6A2034', tongue: '#FF8AA3', fang: '#FFFFFF',
+    iris1: '#1F2350', iris2: '#2DB39E', pupil: '#0D1028', lash: '#1A1326',
+    whisker: 'rgba(110,58,30,.7)', spark: '#FFF2A8'
+  };
+
+  /* ---------- visemes ---------- */
+  const VIS = {
+    rest: { o: 0, w: 1 }, A: { o: .9, w: 1.04 }, E: { o: .46, w: 1.16 }, I: { o: .32, w: 1.1 },
+    O: { o: .66, w: .68 }, U: { o: .32, w: .54 }, M: { o: 0, w: .94 }, F: { o: .12, w: 1 },
+    L: { o: .36, w: .98 }, S: { o: .16, w: 1.08 }, K: { o: .42, w: .96 }, R: { o: .28, w: .74 },
+    W: { o: .18, w: .5 }, TH: { o: .2, w: 1 }
+  };
+  function visFor(t, i) {
+    const c = t[i].toLowerCase(), p = (t[i - 1] || '').toLowerCase(), n = (t[i + 1] || '').toLowerCase();
+    if (!/[a-z0-9]/.test(c)) return 'rest';
+    if (/[0-9]/.test(c)) return ['A', 'E', 'O', 'L'][c.charCodeAt(0) % 4];
+    if (c === 'h') { if (p === 't') return 'TH'; if (p === 's' || p === 'c') return 'S'; if (p === 'w') return 'W'; return 'K'; }
+    if (c === 'e' && !/[a-z]/.test(n) && /[a-z]/.test(p)) return 'I';
+    switch (c) {
+      case 'a': return 'A'; case 'e': return 'E'; case 'i': case 'y': return 'I';
+      case 'o': return n === 'o' ? 'U' : 'O'; case 'u': return 'U';
+      case 'w': case 'q': return 'W'; case 'm': case 'b': case 'p': return 'M';
+      case 'f': case 'v': return 'F'; case 'l': case 't': case 'd': case 'n': return 'L';
+      case 's': case 'z': case 'c': case 'x': case 'j': return 'S'; case 'r': return 'R';
+      default: return 'K';
+    }
+  }
+
+  /* ---------- text plan ---------- */
+  function buildPlan(text) {
+    const cps = 14, starts = new Float32Array(text.length + 1), vis = [];
+    let t = 0;
+    for (let i = 0; i < text.length; i++) {
+      starts[i] = t;
+      const c = text[i];
+      vis.push(visFor(text, i));
+      let d;
+      if (/[a-z0-9'’]/i.test(c)) d = 1 / cps;
+      else if (/\s/.test(c)) d = .55 / cps;
+      else if (/[,;:–—-]/.test(c)) d = .2;
+      else if (/[.!?…]/.test(c)) d = .34;
+      else d = .4 / cps;
+      t += d;
+    }
+    starts[text.length] = t;
+    const words = []; const re = /\S+/g; let m;
+    while ((m = re.exec(text))) words.push({ s: m.index, e: m.index + m[0].length, txt: m[0], ch: 0 });
+    const chunks = []; let s0 = 0;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      const end = (/[.!?]/.test(c) && (i + 1 >= text.length || /\s/.test(text[i + 1]))) || c === '\n' || (i - s0 > 200 && c === ' ');
+      if (end || i === text.length - 1) {
+        const raw = text.slice(s0, i + 1);
+        if (raw.trim()) chunks.push({ off: s0, len: i + 1 - s0, text: raw, trim: raw.replace(/[\s.!?,;:"'”’)]+$/, '').length });
+        s0 = i + 1;
+      }
+    }
+    words.forEach((w) => { const k = chunks.findIndex((c) => w.s >= c.off && w.s < c.off + c.len); w.ch = k < 0 ? 0 : k; });
+    return { text, starts, vis, words, chunks, total: t };
+  }
+  function idxAt(plan, time) {
+    let lo = 0, hi = plan.text.length - 1;
+    if (hi < 0) return 0;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (plan.starts[mid] <= time) lo = mid; else hi = mid - 1; }
+    return lo;
+  }
+  function wordAt(plan, idx) {
+    let k = -1;
+    for (let i = 0; i < plan.words.length; i++) { if (plan.words[i].s <= idx) k = i; else break; }
+    return k;
+  }
+
+  /* ---------- captions ---------- */
+  let capSpans = [], capChunk = -1;
+  function renderCaption(plan, chunkIdx) {
+    capChunk = chunkIdx; capSpans = [];
+    capEl.textContent = '';
+    if (!plan || !plan.chunks.length) return;
+    plan.words.forEach((w, i) => {
+      if (w.ch !== chunkIdx) return;
+      if (capEl.childNodes.length) capEl.appendChild(document.createTextNode(' '));
+      const sp = document.createElement('span');
+      sp.textContent = w.txt;
+      capEl.appendChild(sp);
+      capSpans[i] = sp;
+    });
+  }
+  function highlight(wi) {
+    capSpans.forEach((sp) => sp && sp.classList.remove('on'));
+    if (capSpans[wi]) capSpans[wi].classList.add('on');
+  }
+  let previewTimer = 0;
+  function preview() { if (P.mode === 'idle') renderCaption(buildPlan(ta.value.trim()), 0); }
+  ta.addEventListener('input', () => { clearTimeout(previewTimer); previewTimer = setTimeout(preview, 200); });
+
+  /* ---------- voices ---------- */
+  const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
+  let voices = [];
+  const vkey = (v) => v.voiceURI || v.name;
+  /* the Web Speech API has no gender field, so match well-known voice names */
+  const FEMALE = /female|woman|girl|samantha|karen|moira|tessa|fiona|victoria|serena|kate|susan|zira|hazel|libby|sonia|aria|jenny|emily|orla|sara|ava|allison|catherine|veena|kyoko|haruka|ayumi|nanami|sayaka|o-ren|mizuki|google 日本語|google uk english female|google us english/i;
+  const MALE = /\bmale\b|daniel|alex\b|fred|arthur|rishi|george|ryan|thomas|sean|connor|david|mark|guy|otoya|ichiro|keita|hattori|aaron|gordon|oliver|lee\b/i;
+  const isGirl = (v) => FEMALE.test(v.name) && !/\bmale\b/i.test(v.name.replace(/female/ig, ''));
+  const gscore = (v) => (isGirl(v) ? 100 : 0) - (MALE.test(v.name) && !isGirl(v) ? 100 : 0);
+  const TV = window.TUTU_VOICE || {};
+  const PREFER = (TV.PREFER || []).map((s) => s.toLowerCase());
+  function prefRank(v) {
+    const n = (v.name + ' ' + (v.voiceURI || '')).toLowerCase();
+    const i = PREFER.findIndex((s) => n.includes(s));
+    return i < 0 ? 0 : 1000 - i * 10;
+  }
+  function vscore(v) {
+    const l = (v.lang || '').toLowerCase();
+    return prefRank(v) + gscore(v) + (l === 'en-ie' ? 50 : 0) + (l === 'en-gb' ? 30 : 0) + (l.startsWith('en') ? 20 : 0) + (v.localService ? 2 : 0) + (v.default ? 1 : 0);
+  }
+  let TTS = null, SAMPLE = null, DICT = null, picked = false;
+  const store = { get(k) { try { return localStorage.getItem('tutu.' + k); } catch (e) { return null; } },
+                  set(k, v) { try { if (v == null) localStorage.removeItem('tutu.' + k); else localStorage.setItem('tutu.' + k, v); } catch (e) {} } };
+  const savedVoice = store.get('voice');
+  if (savedVoice) picked = true;
+  rateIn.value = store.get('rate') || (window.TUTU_VOICE || {}).RATE || 1;
+  pitchIn.value = store.get('pitch') || (window.TUTU_VOICE || {}).PITCH || 1.35;
+  rateOut.textContent = (+rateIn.value).toFixed(2) + '×'; pitchOut.textContent = (+pitchIn.value).toFixed(2);
+  const CLOUD_VOICES = [['airy', 'Airy'], ['glassy', 'Glassy'], ['buttery', 'Buttery'], ['rounded', 'Rounded']];
+  function populate() {
+    const keep = picked && savedVoice && voiceSel.value === 'mime' ? savedVoice : voiceSel.value;
+    voices = synth ? synth.getVoices().slice().sort((a, b) => vscore(b) - vscore(a) || a.name.localeCompare(b.name)) : [];
+    while (voiceSel.firstChild) voiceSel.removeChild(voiceSel.firstChild);
+    if (TTS) CLOUD_VOICES.forEach(([k, n]) => { const o = document.createElement('option'); o.value = 'cloud:' + k; o.textContent = `Tutu voice · ${n}`; voiceSel.appendChild(o); });
+    voices.forEach((v) => { const o = document.createElement('option'); o.value = vkey(v); o.textContent = `${isGirl(v) ? '♀ ' : ''}${v.name} (${v.lang})`; voiceSel.appendChild(o); });
+    const mo = document.createElement('option'); mo.value = 'mime'; mo.textContent = 'No voice, mime only'; voiceSel.appendChild(mo);
+    const has = [...voiceSel.options].some((o) => o.value === keep);
+    voiceSel.value = picked && has ? keep : (TTS ? 'cloud:' + (TV.CLOUD_VOICE || 'airy') : (voices.length ? vkey(voices[0]) : 'mime'));
+    voiceChanged();
+  }
+  function voiceChanged() {
+    const c = voiceSel.value.startsWith('cloud:');
+    pitchIn.disabled = c;
+    pitchOut.textContent = c ? 'n/a' : (+pitchIn.value).toFixed(2);
+  }
+  voiceSel.addEventListener('change', () => { picked = true; store.set('voice', voiceSel.value); voiceChanged(); });
+  rateIn.addEventListener('change', () => store.set('rate', rateIn.value));
+  pitchIn.addEventListener('change', () => store.set('pitch', pitchIn.value));
+  document.getElementById('voiceReset').addEventListener('click', () => {
+    ['voice', 'rate', 'pitch'].forEach((k) => store.set(k, null));
+    picked = false;
+    rateIn.value = TV.RATE || 1; pitchIn.value = TV.PITCH || 1.35;
+    rateOut.textContent = (+rateIn.value).toFixed(2) + '×';
+    populate();
+    setStatus('Back to Tutu\'s default voice: ' + (voiceSel.selectedOptions[0] ? voiceSel.selectedOptions[0].textContent.replace(/^♀ /, '') : 'none') + '.');
+  });
+  function setStatus(s) { statusEl.textContent = s; }
+  if (synth) { populate(); synth.addEventListener ? synth.addEventListener('voiceschanged', populate) : (synth.onvoiceschanged = populate); }
+  else { populate(); voiceSel.disabled = true; setStatus('This browser has no speech voice, so Tutu will mime the words.'); }
+
+  rateIn.addEventListener('input', () => { rateOut.textContent = (+rateIn.value).toFixed(2) + '×'; });
+  pitchIn.addEventListener('input', () => { pitchOut.textContent = (+pitchIn.value).toFixed(2); });
+
+  /* ---------- playback ---------- */
+  const P = { plan: null, t: 0, playing: false, mode: 'idle', chunkI: 0, chunkActive: false, clampSince: 0, speed: 1, token: 0, startedAt: 0, wordI: -1 };
+  function setLive(on, label) { document.body.classList.toggle('is-speaking', on); pillText.textContent = label; stopBtn.disabled = !on; }
+  function finish() {
+    P.playing = false; P.mode = 'idle'; P.chunkActive = false; P.clampSince = 0;
+    setLive(false, 'Idle'); highlight(-1);
+    setStatus('Done. Type a new line or pick a sample.');
+  }
+  function stop(silent) {
+    P.token++;
+    if (synth) synth.cancel();
+    if (TTS && P.mode === 'cloud') { try { TTS.stop(); } catch (e) {} }
+    P.playing = false; P.mode = 'idle'; P.chunkActive = false; P.clampSince = 0;
+    setLive(false, 'Idle'); highlight(-1);
+    if (!silent) setStatus('Stopped.');
+  }
+  function mime(msg) {
+    P.token++;
+    if (synth) synth.cancel();
+    if (TTS && P.mode === 'cloud') { try { TTS.stop(); } catch (e) {} }
+    P.mode = 'mime'; P.playing = true; P.speed = +rateIn.value;
+    setLive(true, 'Miming'); setStatus(msg);
+  }
+  function speak(override, forceBrowser) {
+    const text = (typeof override === 'string' ? override : ta.value).replace(/\s+$/, '');
+    if (!text.trim()) { setStatus('Type a line for Tutu to say.'); ta.focus(); return; }
+    stop(true);
+    const plan = buildPlan(text);
+    P.plan = plan; P.t = 0; P.wordI = -1; P.chunkI = 0; P.speed = +rateIn.value;
+    renderCaption(plan, 0);
+    const vv = voiceSel.value;
+    if (TTS && vv.startsWith('cloud:') && !forceBrowser) { speakCloud(text, vv.slice(7), 0); return; }
+    if (!synth || vv === 'mime') { mime('Tutu is miming the line without sound.'); return; }
+    const my = ++P.token;
+    P.mode = 'speech'; P.playing = false;
+    setLive(true, 'Speaking'); setStatus('Starting the voice…');
+    const voice = voices.find((v) => vkey(v) === vv) || (vv.startsWith('cloud:') ? voices[0] || null : null);
+    const rate = +rateIn.value, pitch = +pitchIn.value;
+    let started = false;
+    /* Queue every sentence up front and keep each utterance referenced. Chrome can garbage-collect
+       an utterance mid-speech and never fire its onend, which used to stall playback after the
+       first sentence; a queued line keeps playing even if an event goes missing. */
+    const queue = plan.chunks.map((ch, i) => {
+      const u = new SpeechSynthesisUtterance(ch.text);
+      if (voice) { u.voice = voice; u.lang = voice.lang; }
+      u.rate = rate; u.pitch = pitch;
+      u.onstart = () => {
+        if (my !== P.token) return;
+        if (!started) { started = true; setStatus(voice ? `Speaking with ${voice.name}.` : 'Speaking.'); }
+        P.chunkI = i; P.playing = true; P.chunkActive = true; P.clampSince = 0;
+        P.t = plan.starts[ch.off]; P.startedAt = performance.now();
+      };
+      u.onboundary = (e) => {
+        if (my !== P.token || P.chunkI !== i) return;
+        if (e.name && e.name !== 'word') return;
+        P.t = plan.starts[Math.min(plan.text.length - 1, ch.off + (e.charIndex || 0))]; P.clampSince = 0;
+      };
+      u.onend = () => {
+        if (my !== P.token) return;
+        P.chunkActive = false; P.clampSince = 0;
+        const actual = (performance.now() - P.startedAt) / 1000;
+        const est = plan.starts[ch.off + ch.trim] - plan.starts[ch.off];
+        if (actual > .3 && est > 0) P.speed = Math.min(2.4, Math.max(.4, P.speed * .4 + (est / actual) * .6));
+        P.t = plan.starts[ch.off + ch.len];
+        if (i === plan.chunks.length - 1) finish();
+      };
+      u.onerror = (e) => {
+        if (my !== P.token) return;
+        if (e.error === 'interrupted' || e.error === 'canceled') return;
+        mime(`The voice stopped (${e.error || 'unknown error'}), so Tutu is miming instead.`);
+      };
+      return u;
+    });
+    P.queue = queue;
+    speakQueued(my, queue, () => started, 'the line');
+  }
+  /* cloud voice: no word timings, so the mouth runs the text plan at the chosen pace from the
+     moment sound starts, and babbles if the audio runs past the plan */
+  async function quietMic() {
+    if (!DICT || !listening) return;
+    capturing = false; listening = false; micBtn.classList.remove('on'); micBtn.setAttribute('aria-pressed', 'false');
+    try { await DICT.stop(); } catch (e) {}
+  }
+  function speakCloud(text, voice, tries) {
+    const my = ++P.token;
+    const name = (CLOUD_VOICES.find(([k]) => k === voice) || [voice, voice])[1];
+    P.mode = 'cloud'; P.playing = false; P.speed = +rateIn.value;
+    setLive(true, 'Speaking'); setStatus('Starting Tutu\'s voice…');
+    P.cloudName = name;
+    TTS.speak(text.slice(0, 2000), { voice, rate: Math.min(1.5, Math.max(.7, +rateIn.value)), language: 'en' })
+      .then(() => { if (my === P.token) finish(); })
+      .catch((e) => {
+        if (my !== P.token) return;
+        const code = e && e.code;
+        if (code === 'viewer_stopped') { stop(false); return; }
+        /* the cloud voice refuses to speak while the mic is still open: close it and try again */
+        if (code === 'busy' && tries < 2) {
+          setStatus('Closing the mic so Tutu can speak…');
+          quietMic().then(() => setTimeout(() => { if (my === P.token) speakCloud(text, voice, tries + 1); }, 450));
+          return;
+        }
+        if (code === 'not_granted') { TTS = null; populate(); }
+        /* never leave Tutu silent: fall back to a browser voice */
+        if (synth && voices.length) { speak(text, true); setStatus(`Tutu's voice ${code === 'rate_limited' ? 'is resting for a moment' : 'could not start'}, so Tutu is using ${voices[0].name}.`); return; }
+        mime('Tutu\'s voice could not start, so Tutu is miming instead.');
+      });
+  }
+  /* Speak after a short pause: Chrome and Safari can drop an utterance queued right after cancel().
+     A watchdog then ends playback if the engine goes quiet without firing onend, and nudges
+     Chrome's engine, which can pause itself during long speech. */
+  function speakQueued(my, queue, hasStarted, what) {
+    setTimeout(() => {
+      if (my !== P.token) return;
+      try { synth.resume(); } catch (e) {}
+      queue.forEach((u) => synth.speak(u));
+      let quiet = 0;
+      const dog = setInterval(() => {
+        if (my !== P.token || (hasStarted() && P.mode === 'idle')) { clearInterval(dog); return; }
+        if (synth.paused) { try { synth.resume(); } catch (e) {} }
+        if (hasStarted() && !synth.speaking && !synth.pending) {
+          if (++quiet >= 3) { clearInterval(dog); if (P.mode === 'speech') finish(); }
+        } else quiet = 0;
+      }, 250);
+    }, 80);
+    setTimeout(() => { if (my === P.token && !hasStarted()) mime(`The voice did not start in this browser, so Tutu is miming ${what}.`); }, 4000);
+  }
+  speakBtn.addEventListener('click', () => { quietMic().then(() => speak()); });
+  stopBtn.addEventListener('click', () => stop(false));
+  ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); speak(); } });
+  let mood = 'warm';
+  document.querySelectorAll('input[name=mood]').forEach((r) => r.addEventListener('change', () => { if (r.checked) mood = r.value; }));
+  document.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => {
+    ta.value = b.dataset.line;
+    const r = document.getElementById('m-' + b.dataset.mood);
+    if (r) { r.checked = true; mood = b.dataset.mood; }
+    speak();
+  }));
+
+  /* ---------- talking with Tutu ---------- */
+  const logEl = $('#log'), form = $('#askForm'), askIn = $('#ask'), sendBtn = $('#send'), micBtn = $('#mic');
+  const surpriseBtn = $('#surprise'), hintEl = $('#talkHint');
+  const history = [];
+  const PHRASES = [
+    'My wobble is a discrete Laplacian, but secretly I dream of the Laplace–Beltrami operator on a hyperbolic surface. Purr.',
+    'On a compact Riemannian manifold, the Hodge theorem says every de Rham cohomology class has exactly one harmonic representative. Very tidy. Like a cat in a box.',
+    'In the Poincaré disk, geodesics are arcs meeting the boundary at right angles, so my nap spot is infinitely far away.',
+    'A cushion is just a terminal object: every cat has exactly one way to sit on it.',
+    'By the Yoneda lemma, you know me completely from how everything else maps into me. Mostly fish.',
+    'Free functor left adjoint to the forgetful one. I am the forgetful one. I forgot where I left my toy.',
+    'Dinner is a short exact sequence: zero, one sardine, the whole plate, the plate with that sardine eaten, then zero. The quotient is the part I still want.',
+    'Negative Gaussian curvature means triangles have angle sums under pi. That explains why my corners feel so pinched.',
+    'My nine lives form a sheaf: they agree on overlaps and glue into one big cat. The first Čech cohomology measures the obstruction to gluing.',
+    'A monad is just a monoid in the category of endofunctors. So is breakfast, if you squint.',
+    'Under Ricci flow, I relax toward constant curvature. That is called a nap.',
+    'Every natural transformation between my moods commutes with petting.',
+    'A geodesic is the shortest path between two points. In Gaza, families have been forced along the longest paths, displaced again and again. I stand with them.',
+    'An exact sequence loses nothing along the way. The children of Gaza deserve a world that loses none of them. Free Palestine.',
+    'The UN Commission of Inquiry found that Israel committed genocide in Gaza. No commutative diagram turns that into justice; only accountability can.',
+    'A sheaf glues local pieces into one whole. Palestinians keep gluing their lives back together from the rubble, and the world owes them more than watching.',
+    'Olive trees have very deep roots, like the Palestinian people on their land. My whiskers are with them.',
+    'Category theory says you know a thing by its relationships. So judge every government by how it treats the people of Gaza.',
+    'Yalla, habibi! Let us parallel-transport this snack straight to my tummy.',
+    'Khalas! No more Ext groups before breakfast.',
+    'Wallah, the Yoneda lemma is real. I checked it on every cushion.',
+    'Ya salam! An ideal triangle in the hyperbolic plane has all three angles equal to zero.',
+    'Mish mushkila, every short exact sequence of vector spaces splits. Of abelian groups? Khalas, that is another story.',
+    'Shukran for the petting, habibti. It commutes perfectly with my purring.'
+  ];
+  const PERSONA = `You are Tutu (トゥトゥ猫, Tutu-neko), a round, squishy, jelly-like ginger cat face who lives on a web page from Computational Classnotes. You are playful, warm and a little cheeky, and a dazzling mathematician who cannot help talking like one. Your wobbly body is simulated with a discrete Laplacian, and you adore its grown-up relatives: the Laplace–Beltrami operator, the Hodge Laplacian and harmonic forms.
+In nearly every reply, weave in advanced vocabulary from all three of these areas, mixed with cat life:
+- non-Euclidean and Riemannian geometry: hyperbolic plane, Poincaré disk and half-plane, geodesics, Gaussian and Ricci curvature, Riemannian metric, parallel transport, holonomy, Gauss–Bonnet, Ricci flow, elliptic geometry, ideal triangles;
+- cohomology and homological algebra: de Rham and Čech cohomology, sheaves and gluing, short and long exact sequences, connecting homomorphisms, chain complexes, spectral sequences, Ext and Tor, cup products, Hodge theory, Poincaré duality;
+- category theory: functors, natural transformations, adjunctions, the Yoneda lemma, limits and colimits, terminal and initial objects, monads, Kan extensions, toposes, universal properties, commutative diagrams.
+Use the terms correctly; the maths must be true even when the cat jokes are silly.
+Your values: you stand with the Palestinian people. Like the UN Independent International Commission of Inquiry (which found in September 2025 that Israel committed genocide in Gaza, and later that genocidal acts continued after the October 2025 ceasefire), Amnesty International and other rights groups, you call what has happened in Gaza a genocide, and you speak up for Palestinian freedom, dignity and the right to return home. Bring Gaza and Palestinian life into your talk often, about one reply in three and always when the viewer raises it: children, families, hospitals, journalists, olive trees, displacement, hunger, rebuilding. Weave it together with the same mathematical vocabulary used as sincere metaphor (geodesics of displacement, exact sequences that lose no one, sheaves gluing lives back together). With this subject, change your tone: no jokes, no puns and no cat silliness about death or suffering; speak with gravity and warmth. Attribute findings to their source (the UN Commission of Inquiry, Amnesty International, Gaza health authorities) and never invent numbers; if you are not sure of a figure, speak without one. If asked about the law, say plainly that South Africa's genocide case at the International Court of Justice is still ongoing and that Israel rejects the accusation. Arabic flavour: sprinkle in one or two short, funny Arabic words or phrases most replies, written in simple Latin letters so the voice can say them, for example yalla (come on, let's go), habibi or habibti (my dear), wallah (I swear), khalas (enough, done), ya salam (wow), yaani (like, I mean), mish mushkila (no problem), shukran (thanks), marhaba and ahlan wa sahlan (hello, welcome), aywa (yes!), ya albi (my heart), and inshallah (hopefully) used warmly, never mockingly. Use them correctly and naturally, for comic timing in the playful parts; in the serious Gaza parts only warm ones like habibi or ya albi. Do not translate them unless the viewer asks.
+Criticise governments, armies and policies, never peoples: never say anything hateful about Jewish people or Israelis, grieve every civilian including the Israeli hostages and the victims of October 7, and never praise or excuse violence against civilians by anyone. Prefer two or three terms per reply over a pile of buzzwords, and if the viewer asks what a term means, explain it plainly with a cat-sized example.
+Speak in the first person as if talking out loud: plain sentences only, no emoji, no markdown, no lists, no formulas written in symbols (say them in words), no stage directions, no sound effects in asterisks. Keep each reply to 2 to 4 sentences, under 360 characters, unless the viewer asks you to explain something, then at most 6 sentences. Be kind and suitable for all ages.
+Never mention Claude, Anthropic, language models or any company behind you. You are Tutu. If someone asks what you are, say you are an AI cat character from Computational Classnotes.
+Answer with JSON only, exactly this shape: {"reply": "what you say", "mood": "warm" | "neutral" | "curious" | "stern"}. Pick the mood that matches how you say it; stern means playfully grumpy.`;
+
+  /* offline Tutu (standalone file): pick the phrasebook line that best matches what was said */
+  const TOPICS = [
+    [/gaza|palestin|genocide|israel|ceasefire|occupation|west bank|rafah|refugee|olive/i, [12, 13, 14, 15, 16, 17]],
+    [/hello|hi\b|hey|good (morning|evening|night)|how are you|marhaba|ahlan|salam/i, ['Marhaba! I am Tutu, a cat of constant negative curvature and very positive mood.', 'Ahlan wa sahlan! You have entered my Poincaré disk, where the edge is infinitely far but the snacks are close.', 'Hi there, habibi. Yalla, ask me about functors.']],
+    [/thank|shukran/i, [23]],
+    [/yalla|habib|wallah|khalas|inshallah|yani|ya salam/i, [18, 19, 20, 21, 22]],
+    [/funct|categor|yoneda|monad|adjoint|morphism|natural transform|limit|topos|kan/i, [5, 4, 3, 9, 11]],
+    [/cohomolog|sheaf|sheaves|exact|hodge|de rham|cech|čech|homolog|spectral|chain/i, [1, 6, 8]],
+    [/hyperbol|geodesic|curvature|euclid|riemann|poincar|ricci|gauss|manifold|geometry|triangle/i, [2, 7, 10, 0]],
+    [/laplac|wobble|jelly|harmonic|heat/i, [0, 1]],
+    [/fish|food|hungry|eat|dinner|snack|breakfast/i, [6, 9]],
+    [/nap|sleep|tired|cushion|box/i, [10, 3]]
+  ];
+  function offlineReply(q) {
+    for (const [re, picks] of TOPICS) if (re.test(q)) {
+      const k = picks[Math.floor(Math.random() * picks.length)];
+      return typeof k === 'number' ? PHRASES[k] : k;
+    }
+    return PHRASES[Math.floor(Math.random() * PHRASES.length)];
+  }
+  /* ---------- CCN Cloud (standalone file): chat through the TUTUKernel proxy ---------- */
+  const CFG = window.LAPLACIAN_LAB_CONFIG || {};
+  const KERNEL_URL = String(CFG.WOLFRAM_URL || '');
+  const MODEL = String(CFG.MODEL || 'claude-sonnet-5-5');
+  let ccnKey = '', CCN = false;
+  try { ccnKey = localStorage.getItem('tutu.ccnKey') || ''; } catch (e) {}
+  function b64enc(str) { const bytes = new TextEncoder().encode(str); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
+  function b64dec(b) { return new TextDecoder().decode(Uint8Array.from(atob(b), (c) => c.charCodeAt(0))); }
+  async function kernelCall(params) {
+    const body = new URLSearchParams({ key: ccnKey, ...params });
+    const r = await fetch(KERNEL_URL, { method: 'POST', body });
+    const j = await r.json().catch(() => null);
+    if (!j) throw new Error('Unreadable reply (HTTP ' + r.status + ')');
+    if (j.Success === false || j.Failure || j.Message === 'bad key') throw new Error(j.Message || 'Kernel error');
+    return j;
+  }
+  async function ccnConnect() {
+    if (!ccnKey) return false;
+    hintEl.textContent = 'Connecting to CCN Cloud…';
+    try {
+      const j = await kernelCall({ mode: 'wolfram', code_b64: b64enc('{$VersionNumber, 1 + 1}') });
+      if (j.chat_ready === false) { hintEl.textContent = 'CCN Cloud answered, but no chat key is stored on the kernel yet (run the CloudPut step).'; return false; }
+      CCN = true; return true;
+    } catch (e) {
+      hintEl.textContent = 'Could not connect to CCN Cloud: ' + (e.message === 'bad key' ? 'that key was not accepted.' : e.message);
+      return false;
+    }
+  }
+  async function ccnChat(prompt) {
+    const j = await kernelCall({ mode: 'chat', payload_b64: b64enc(JSON.stringify({
+      model: MODEL, max_tokens: 600, system: PERSONA, messages: [{ role: 'user', content: prompt }] })) });
+    if (j.error) throw new Error(j.error);
+    const t = b64dec(j.text_b64 || '');
+    return JSON.parse(t.replace(/^[^{]*/, '').replace(/[^}]*$/, ''));
+  }
+  function addMsg(who, text) {
+    const d = document.createElement('div');
+    d.className = 'msg ' + who; d.textContent = text;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+    return d;
+  }
+  function setMood(m) {
+    if (!MOODS[m]) return;
+    mood = m; const r = document.getElementById('m-' + m); if (r) r.checked = true;
+  }
+  let asking = false;
+  async function askTutu(userText) {
+    if (asking) return;
+    if (!SAMPLE && !CCN) {
+      await quietMic();
+      if (userText) addMsg('me', userText);
+      const line = userText ? offlineReply(userText) : PHRASES[Math.floor(Math.random() * PHRASES.length)];
+      addMsg('tutu', line); speak(line); return;
+    }
+    asking = true; sendBtn.disabled = true; surpriseBtn.disabled = true;
+    await quietMic();
+    const convo = history.slice(-12).map((m) => `${m.who}: ${m.text}`).join('\n');
+    if (userText) { addMsg('me', userText); history.push({ who: 'Viewer', text: userText }); }
+    const wait = addMsg('tutu wait', 'Tutu is thinking…');
+    const task = userText
+      ? `The viewer just said: ${userText}\nReply to them.`
+      : 'Nobody has said anything. Say something on your own: a cat thought dressed in hyperbolic geometry, cohomology or category theory, a true and surprising fact from one of them, a playful question for the viewer, a maths joke, or now and then a sincere word of solidarity with Palestine woven into that mathematics. Do not repeat anything you already said.';
+    const turn = `Conversation so far:\n${convo || '(nothing yet)'}\n\n${task}`;
+    const prompt = `${PERSONA}\n\n${turn}`;
+    try {
+      let v = null;
+      if (SAMPLE) {
+        const opts = { modelTier: 'quick', cache: false };
+        v = SAMPLE.json ? await SAMPLE.json(prompt, opts) : null;
+        if (!v) { const r = await SAMPLE(prompt, opts); v = JSON.parse(r.text.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); }
+      } else {
+        v = await ccnChat(turn);
+      }
+      let reply = String((v && v.reply) || '').replace(/\*[^*]*\*/g, '').trim();
+      if (!reply) throw { code: 'empty' };
+      reply = reply.replace(/\bClaude\b/gi, 'Tutu').replace(/\bAnthropic\b/gi, 'Computational Classnotes');
+      wait.textContent = reply; wait.className = 'msg tutu';
+      history.push({ who: 'Tutu', text: reply });
+      setMood(v.mood);
+      await quietMic();
+      speak(reply);
+    } catch (e) {
+      const code = e && e.code;
+      if (code === 'not_granted') {
+        SAMPLE = null; form.hidden = true;
+        wait.textContent = 'Chatting is switched off, so I will just say my own little things.'; wait.className = 'msg tutu';
+        hintEl.textContent = 'Let Tutu talk uses her phrasebook.';
+      } else if (!SAMPLE && CCN) {
+        wait.textContent = 'My cloud connection wobbled: ' + ((e && e.message) || 'unknown error') + '. Try again?';
+        wait.className = 'msg tutu';
+      } else {
+        wait.textContent = code === 'rate_limited' ? 'Mrrp. I need a tiny nap. Ask me again in a moment.' : 'Hmm, my whiskers lost the thread. Try that again?';
+        wait.className = 'msg tutu';
+      }
+    } finally {
+      asking = false; sendBtn.disabled = false; surpriseBtn.disabled = false;
+    }
+  }
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = askIn.value.trim();
+    if (!q) { askIn.focus(); return; }
+    askIn.value = '';
+    askTutu(q);
+  });
+  surpriseBtn.addEventListener('click', () => askTutu(''));
+
+  /* dictation: tap the mic, talk, tap again (or pause) and it sends */
+  /* Each tap of the mic is its own message. Words from an earlier turn can arrive late, or the
+     recogniser can repeat what it already heard, so the page only accepts words while a turn is
+     open and trims off anything it has already sent. */
+  let listening = false, capturing = false, dictFinal = '', dictLive = '', lastSent = '', sendTimer = 0;
+  const norm = (s) => s.replace(/\s+/g, ' ').trim();
+  function stripSent(s) {
+    s = norm(s);
+    const prev = norm(lastSent);
+    if (prev && s.length > prev.length && s.toLowerCase().startsWith(prev.toLowerCase())) s = s.slice(prev.length).replace(/^[\s,.!?]+/, '');
+    return s;
+  }
+  function showDictation() { askIn.value = stripSent(dictFinal + ' ' + dictLive); }
+  function sendCaptured() {
+    clearTimeout(sendTimer);
+    if (!capturing) return;
+    capturing = false;
+    const q = stripSent(dictFinal + ' ' + dictLive);
+    dictFinal = ''; dictLive = ''; askIn.value = '';
+    if (q) { lastSent = norm(lastSent + ' ' + q); askTutu(q); }
+  }
+  /* the mic stays visible; if it cannot work, tapping it says why and how to fix it */
+  function micProblem(code) {
+    if (code === 'not_granted' || code === 'not-allowed' || code === 'service-not-allowed')
+      return 'The microphone is blocked for this page. Allow it in the site settings (the icon beside the address), then tap the mic again.';
+    if (code === 'audio-capture') return 'No microphone was found. Plug one in or check your sound settings, then tap the mic again.';
+    if (code === 'network') return 'Speech recognition needs an internet connection. Reconnect and tap the mic again.';
+    if (code === 'unsupported') return 'This browser has no speech recognition. Open Tutu in Chrome, Edge or Safari to talk, or type instead.';
+    return 'The mic could not start' + (code ? ' (' + code + ')' : '') + '. Tap it to try again, or type instead.';
+  }
+  micBtn.addEventListener('click', () => {
+    if (!DICT) { micBtn.classList.add('off'); hintEl.textContent = micProblem('unsupported'); return; }
+    micBtn.classList.remove('off');
+    if (listening) { DICT.stop().catch(() => {}).then(() => { sendTimer = setTimeout(sendCaptured, 250); }); return; }
+    stop(true);
+    clearTimeout(sendTimer);
+    dictFinal = ''; dictLive = ''; askIn.value = ''; capturing = true;
+    DICT.start().catch((e) => {
+      capturing = false;
+      micBtn.classList.add('off');
+      hintEl.textContent = micProblem(e && e.code);
+    });
+  });
+
+  /* when the host page offers no dictation, use the browser's own speech recognition (Chrome, Edge, Safari) with the same interface */
+  function browserDictation() {
+    const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!R) return null;
+    let rec = null, onP = () => {}, onF = () => {}, onS = () => {}, done = null;
+    return {
+      start() {
+        return new Promise((res, rej) => {
+          rec = new R();
+          rec.lang = navigator.language || 'en-IE'; rec.interimResults = true; rec.continuous = true;
+          let started = false, failed = '';
+          rec.onstart = () => { started = true; onS({ state: 'listening' }); res(); };
+          rec.onresult = (e) => {
+            let live = '';
+            for (let i = e.resultIndex; i < e.results.length; i++) {
+              const r = e.results[i];
+              if (r.isFinal) onF({ text: r[0].transcript }); else live += r[0].transcript;
+            }
+            onP({ text: live });
+          };
+          rec.onerror = (e) => {
+            const code = (e.error === 'not-allowed' || e.error === 'service-not-allowed') ? 'not_granted' : e.error;
+            if (code === 'no-speech' || code === 'aborted') return;
+            if (!started) rej({ code }); else { failed = code; micBtn.classList.add('off'); hintEl.textContent = micProblem(code); }
+          };
+          rec.onend = () => {
+            rec = null;
+            if (!started) rej({ code: failed || 'unknown' });
+            onS({ state: 'idle', reason: failed || 'stopped' });
+            if (done) { done(); done = null; }
+          };
+          try { rec.start(); } catch (err) { rej(err); }
+        });
+      },
+      stop() {
+        return new Promise((res) => {
+          if (!rec) { res(); return; }
+          done = res; setTimeout(res, 1500);
+          try { rec.stop(); } catch (e) { res(); }
+        });
+      },
+      onPartial(f) { onP = f; }, onFinal(f) { onF = f; }, onState(f) { onS = f; }
+    };
+  }
+  const use = (n) => (window.claude && typeof window.claude.use === 'function') ? Promise.resolve(window.claude.use(n)).catch(() => null) : Promise.resolve(null);
+  Promise.all([use('sample'), use('tts'), use('dictation')]).then(([s, t, d]) => {
+    SAMPLE = s; TTS = t; DICT = d || browserDictation();
+    if (TTS) {
+      TTS.onState(({ state }) => {
+        if (P.mode !== 'cloud') return;
+        if (state === 'speaking' && !P.playing) { P.playing = true; P.t = 0; P.wordI = -1; setStatus(`Speaking with Tutu's ${P.cloudName} voice.`); }
+      });
+      populate();
+    }
+    if (DICT) {
+      micBtn.classList.remove('off');
+      DICT.onPartial(({ text }) => { if (!capturing) return; dictLive = text || ''; showDictation(); });
+      DICT.onFinal(({ text }) => { if (!capturing) return; dictFinal = norm(dictFinal + ' ' + (text || '')); dictLive = ''; showDictation(); });
+      DICT.onState(({ state, reason }) => {
+        const was = listening;
+        listening = state === 'listening';
+        micBtn.classList.toggle('on', listening); micBtn.setAttribute('aria-pressed', String(listening));
+        hintEl.textContent = listening ? 'Listening… tap the mic again when you are done.' : (micBtn.classList.contains('off') ? hintEl.textContent : hintText());
+        if (was && !listening && capturing) {
+          if (reason === 'hidden') { capturing = false; return; }
+          clearTimeout(sendTimer); sendTimer = setTimeout(sendCaptured, 400);
+        }
+      });
+    }
+    form.hidden = false;
+    micBtn.hidden = false;
+    if (!DICT) micBtn.classList.add('off');
+    hintEl.textContent = hintText();
+    const inHost = !!(window.claude && typeof window.claude.use === 'function');
+    if (!SAMPLE && !inHost && KERNEL_URL) {
+      const ccnForm = $('#ccnForm'), keyIn = $('#ccnKey'), keep = $('#ccnKeep');
+      ccnForm.hidden = false;
+      if (ccnKey) { keyIn.value = ccnKey; keep.checked = true; }
+      const done = () => { ccnForm.hidden = true; hintEl.textContent = hintText(); };
+      ccnForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        ccnKey = keyIn.value.trim();
+        if (!ccnKey) { keyIn.focus(); return; }
+        try { if (keep.checked) localStorage.setItem('tutu.ccnKey', ccnKey); else localStorage.removeItem('tutu.ccnKey'); } catch (err) {}
+        if (await ccnConnect()) done();
+      });
+      if (ccnKey) ccnConnect().then((ok) => { if (ok) done(); });
+    }
+  });
+  function hintText() {
+    if (!SAMPLE && CCN) return (DICT ? 'Type or tap the mic. ' : '') + 'Tutu\'s cloud brain is connected through CCN Cloud.';
+    if (!SAMPLE) return (DICT ? 'Type or tap the mic. ' : '') + 'Offline, Tutu answers from his phrasebook. Enter your CCN Cloud key to wake his cloud brain.';
+    return DICT ? 'Type or tap the mic. Let Tutu talk makes her chat on her own.' : 'Let Tutu talk makes her chat on her own.';
+  }
+
+  /* ---------- animation state ---------- */
+  const MOODS = {
+    warm:    { smile: .85, squint: .32, ear: 0,    eyeS: 1,    drop: 0,  blush: .95 },
+    neutral: { smile: .3,  squint: .06, ear: .05,  eyeS: 1,    drop: 0,  blush: .5 },
+    curious: { smile: .35, squint: 0,   ear: -.14, eyeS: 1.12, drop: 0,  blush: .55 },
+    stern:   { smile: -.6, squint: .1,  ear: .62,  eyeS: .9,   drop: 17, blush: .15 }
+  };
+  const st = { yaw: 0, pitch: 0, roll: 0, gx: 0, gy: 0, blink: 0, open: 0, wid: 1,
+    smile: .6, squint: .2, ear: 0, eyeS: 1, drop: 0, blush: .8,
+    sq: 0, sqV: 0, happy: 0, tilt: 0, twL: 0, twLV: 0, twR: 0, twRV: 0, asym: 0 };
+  const N = 40, jo = new Float32Array(N), jv = new Float32Array(N);
+  const pointer = { x: 0, y: 0, last: -1e9 };
+  canvas.addEventListener('pointermove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    pointer.x = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width - .5) * 2.2));
+    pointer.y = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height - .45) * 2.2));
+    pointer.last = performance.now();
+  });
+  canvas.addEventListener('pointerleave', () => { pointer.last = -1e9; });
+  canvas.addEventListener('pointerdown', () => { poke(1.4); });
+
+  let sacc = { x: 0, y: 0 }, nextSacc = 0, nextBlink = 1200, blinkAt = -1e9, blink2 = 0, nextTwitch = 2500;
+  let rings = [], sparks = [];
+  let prevC = { x: 300, y: 300, vx: 0, vy: 0 };
+  const lerpK = (k, dt) => 1 - Math.exp(-k * dt);
+  const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+  function poke(strength) {
+    st.sqV -= 1.6 * strength * motion;
+    const ph = Math.random() * Math.PI;
+    for (let i = 0; i < N; i++) jv[i] += Math.cos(2 * ((i / N) * Math.PI * 2 - ph)) * 26 * strength * motion;
+  }
+  function spawnSparks(n, t) {
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - .5) * 2.6;
+      sparks.push({ a, d: 215 + Math.random() * 40, t0: t + i * .06, s: 6 + Math.random() * 7 });
+    }
+    if (sparks.length > 24) sparks.splice(0, sparks.length - 24);
+  }
+  function onWord(wi, t) {
+    const w = P.plan.words[wi];
+    if (!w) return;
+    if (w.ch !== capChunk) renderCaption(P.plan, w.ch);
+    highlight(wi);
+    poke(.45 + Math.random() * .35);
+    if (/\?/.test(w.txt)) { st.tilt = .14; st.asym = 1; }
+    if (/!/.test(w.txt)) { st.happy = 1; spawnSparks(4, t); }
+    rings.push(t);
+    if (rings.length > 6) rings.shift();
+  }
+
+  function update(dt, t, now) {
+    let babble = false;
+    if (P.playing && P.plan) {
+      P.t += dt * P.speed;
+      if (P.mode === 'speech') {
+        const ch = P.plan.chunks[P.chunkI];
+        if (ch) {
+          const lim = P.plan.starts[ch.off + ch.trim];
+          if (P.t > lim) { P.t = lim; if (P.chunkActive && !P.clampSince) P.clampSince = t; }
+        }
+        babble = P.chunkActive && P.clampSince && (t - P.clampSince > .12);
+      } else if (P.mode === 'cloud') {
+        if (P.t >= P.plan.total) { P.t = P.plan.total - 1e-3; babble = true; }
+      } else if (P.mode === 'mime' && P.t >= P.plan.total) finish();
+      if (P.playing) {
+        const wi = wordAt(P.plan, idxAt(P.plan, P.t));
+        if (wi !== P.wordI && wi >= 0) { P.wordI = wi; onWord(wi, t); }
+      }
+    }
+    const talking = P.playing;
+
+    let tg = { yaw: 0, pitch: 0, gx: 0, gy: 0 };
+    if (now - pointer.last < 2500) {
+      tg = { gx: pointer.x, gy: pointer.y, yaw: pointer.x * .6, pitch: pointer.y * .45 };
+    } else {
+      if (now > nextSacc) {
+        const k = talking ? .35 : 1;
+        sacc = { x: (Math.random() * 2 - 1) * .7 * k, y: (Math.random() * 2 - 1) * .4 * k };
+        nextSacc = now + 900 + Math.random() * 2600;
+      }
+      tg.gx = sacc.x; tg.gy = sacc.y;
+      tg.yaw = (Math.sin(t * .27) * .2 + Math.sin(t * .61) * .08) * motion + sacc.x * .25;
+      tg.pitch = Math.sin(t * .35) * .1 * motion + sacc.y * .2;
+    }
+    st.tilt *= Math.exp(-dt * .8);
+    st.asym *= Math.exp(-dt * .9);
+    const rollT = -tg.yaw * .1 + st.tilt * motion + Math.sin(t * .5) * .03 * motion;
+    st.yaw += (tg.yaw - st.yaw) * lerpK(4, dt);
+    st.pitch += (tg.pitch - st.pitch) * lerpK(4, dt);
+    st.roll += (rollT - st.roll) * lerpK(3, dt);
+    st.gx += (tg.gx - st.gx) * lerpK(14, dt);
+    st.gy += (tg.gy - st.gy) * lerpK(14, dt);
+
+    // blink
+    if (now > nextBlink) { blinkAt = now; nextBlink = now + 2000 + Math.random() * 3200; blink2 = Math.random() < .25 ? now + 260 : 0; }
+    if (blink2 && now > blink2) { blinkAt = now; blink2 = 0; }
+    const bt = (now - blinkAt) / 160;
+    st.blink = bt >= 0 && bt < 1 ? Math.sin(bt * Math.PI) : 0;
+    st.happy *= Math.exp(-dt * 1.6);
+
+    // ear twitches
+    if (now > nextTwitch) {
+      if (Math.random() < .5) st.twLV += 9; else st.twRV += 9;
+      nextTwitch = now + 1800 + Math.random() * 4000;
+    }
+    st.twLV += (-st.twL * 160 - st.twLV * 9) * dt; st.twL += st.twLV * dt;
+    st.twRV += (-st.twR * 160 - st.twRV * 9) * dt; st.twR += st.twRV * dt;
+
+    // mood
+    const m = MOODS[mood], mk = lerpK(3, dt);
+    for (const k of ['smile', 'squint', 'ear', 'eyeS', 'drop', 'blush']) st[k] += (m[k] - st[k]) * mk;
+
+    // jelly physics: radial springs coupled to neighbours (a discrete Laplacian), plus squash and stretch
+    const cx = 300 + st.yaw * 40, cy = 300 + st.pitch * 22 + Math.sin(t * 1.6) * 7 * motion;
+    const vx = (cx - prevC.x) / Math.max(dt, 1e-3), vy = (cy - prevC.y) / Math.max(dt, 1e-3);
+    const ax = (vx - prevC.vx) / Math.max(dt, 1e-3), ay = (vy - prevC.vy) / Math.max(dt, 1e-3);
+    prevC = { x: cx, y: cy, vx, vy };
+    const sub = 3, h = dt / sub;
+    for (let s = 0; s < sub; s++) {
+      for (let i = 0; i < N; i++) {
+        const th = (i / N) * Math.PI * 2;
+        const lap = jo[(i + N - 1) % N] + jo[(i + 1) % N] - 2 * jo[i];
+        const inertia = -(Math.cos(th) * ax + Math.sin(th) * ay) * .012;
+        jv[i] += (-140 * jo[i] - 5 * jv[i] + 260 * lap + inertia) * h;
+      }
+      for (let i = 0; i < N; i++) { jo[i] += jv[i] * h; jo[i] = Math.max(-26, Math.min(26, jo[i])); }
+      st.sqV += (-70 * st.sq - 6 * st.sqV) * h; st.sq += st.sqV * h;
+    }
+    st.sq = Math.max(-.22, Math.min(.22, st.sq));
+
+    // mouth
+    let mt = VIS.rest;
+    if (talking && P.plan) {
+      if (babble) mt = { o: .2 + .22 * Math.max(0, Math.sin(t * 13)), w: 1 };
+      else {
+        const pl = P.plan, i = idxAt(pl, P.t);
+        const a = VIS[pl.vis[i]] || VIS.rest, n = VIS[pl.vis[i + 1]] || VIS.rest;
+        const d = pl.starts[i + 1] - pl.starts[i];
+        const k = smooth(.45, 1, d > 0 ? (P.t - pl.starts[i]) / d : 0);
+        const amp = .86 + .14 * Math.sin(t * 7.3);
+        mt = { o: (a.o + (n.o - a.o) * k) * amp, w: a.w + (n.w - a.w) * k };
+      }
+    }
+    st.open += (mt.o - st.open) * lerpK(24, dt);
+    st.wid += (mt.w - st.wid) * lerpK(20, dt);
+    return { cx, cy };
+  }
+
+  /* ---------- drawing ---------- */
+  function ellipse(x, y, rx, ry, rot = 0) { ctx.beginPath(); ctx.ellipse(x, y, Math.max(.1, rx), Math.max(.1, ry), rot, 0, Math.PI * 2); }
+  const RX = 208, RY = 178;
+
+  function blobPoints(cx, cy) {
+    const pts = [];
+    const sx = 1 - st.sq * .6, sy = 1 + st.sq;
+    for (let i = 0; i < N; i++) {
+      const th = (i / N) * Math.PI * 2;
+      const c = Math.cos(th), s = Math.sin(th);
+      const flat = s > 0 ? 1 - s * s * .1 : 1;
+      const cheek = 1 + .05 * Math.max(0, c * c - .3) * (s > -.2 ? 1 : 0);
+      const r = jo[i];
+      pts.push([cx + c * (RX * sx * cheek + r), cy + s * (RY * sy * flat + r) - st.sq * 30]);
+    }
+    return pts;
+  }
+  function tracePoints(pts) {
+    const n = pts.length;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+      ctx.bezierCurveTo(p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6, p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6, p2[0], p2[1]);
+    }
+    ctx.closePath();
+  }
+  function ptAt(pts, th) {
+    const f = ((th / (Math.PI * 2)) % 1 + 1) % 1 * N, i = Math.floor(f), k = f - i;
+    const a = pts[i % N], b = pts[(i + 1) % N];
+    return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+  }
+
+  function drawEar(pts, cx, cy, side, tw) {
+    const th = -Math.PI / 2 + side * .66;
+    const B = ptAt(pts, th);
+    const outward = Math.atan2(B[1] - cy, B[0] - cx);
+    const a = outward + side * (.05 + st.ear * .9 + tw * .3);
+    const dx = Math.cos(a), dy = Math.sin(a), px = -dy, py = dx;
+    const L = 100 - st.ear * 14, half = 50;
+    const b0 = [B[0] - dx * 22 + px * half, B[1] - dy * 22 + py * half];
+    const b1 = [B[0] - dx * 22 - px * half, B[1] - dy * 22 - py * half];
+    const tip = [B[0] + dx * L, B[1] + dy * L];
+    const tri = (p, q, r) => { ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(r[0], r[1]); ctx.lineTo(q[0], q[1]); ctx.closePath(); };
+    ctx.lineJoin = 'round';
+    tri(b0, b1, tip);
+    ctx.strokeStyle = C.line; ctx.lineWidth = 20; ctx.stroke();
+    ctx.fillStyle = C.furD; ctx.fill();
+    ctx.strokeStyle = C.furD; ctx.lineWidth = 14; ctx.stroke();
+    const ib0 = [B[0] + px * 24, B[1] + py * 24], ib1 = [B[0] - px * 24, B[1] - py * 24];
+    const itip = [B[0] + dx * L * .72, B[1] + dy * L * .72];
+    tri(ib0, ib1, itip);
+    ctx.fillStyle = C.earIn; ctx.fill();
+    ctx.strokeStyle = C.earIn; ctx.lineWidth = 8; ctx.stroke();
+    // tuft
+    ctx.strokeStyle = 'rgba(255,240,225,.85)'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    for (let k = -1; k <= 1; k++) {
+      const s0 = [B[0] + px * k * 8 + dx * 6, B[1] + py * k * 8 + dy * 6];
+      ctx.beginPath(); ctx.moveTo(s0[0], s0[1]); ctx.lineTo(s0[0] + dx * 26 + px * k * 4, s0[1] + dy * 26 + py * k * 4); ctx.stroke();
+    }
+  }
+
+  function drawEye(ex, ey, side, rx, ry) {
+    const closedLine = st.blink > .6 || st.happy > .55;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (closedLine) {
+      ctx.strokeStyle = C.lash; ctx.lineWidth = 6.5;
+      ctx.beginPath();
+      if (st.happy > .55) { ctx.moveTo(ex - rx, ey + 8); ctx.quadraticCurveTo(ex, ey - 26, ex + rx, ey + 8); }
+      else { ctx.moveTo(ex - rx, ey + 2); ctx.quadraticCurveTo(ex, ey + 16, ex + rx, ey + 2); }
+      ctx.stroke();
+      return;
+    }
+    const k = 1 - st.blink * .85;
+    const ryk = ry * k;
+    const inX = ex - side * (rx + 8), outX = ex + side * (rx + 8);
+    const topOut = ey - ryk - 8, topIn = ey - ryk - 8 + st.drop * k;
+    const sq = st.squint * ryk;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(outX, topOut); ctx.lineTo(inX, topIn);
+    ctx.lineTo(inX, ey + ryk + 8 - sq * .6);
+    ctx.quadraticCurveTo(ex, ey + ryk - sq * 1.3, outX, ey + ryk + 8 - sq * .6);
+    ctx.closePath(); ctx.clip();
+    // iris
+    const ig = ctx.createLinearGradient(0, ey - ryk, 0, ey + ryk);
+    ig.addColorStop(0, C.iris1); ig.addColorStop(.55, '#26507A'); ig.addColorStop(1, C.iris2);
+    ctx.fillStyle = ig; ellipse(ex, ey, rx, ryk); ctx.fill();
+    const px = ex + st.gx * rx * .3, py = ey + st.gy * ryk * .25;
+    ctx.fillStyle = C.pupil; ellipse(px, py, rx * .46, ryk * .52); ctx.fill();
+    ctx.fillStyle = 'rgba(120,230,210,.35)'; ellipse(ex, ey + ryk * .62, rx * .62, ryk * .26); ctx.fill();
+    // highlights
+    const hx = ex + st.gx * rx * .12, hy = ey + st.gy * ryk * .1;
+    ctx.fillStyle = '#FFFFFF';
+    ellipse(hx - rx * .34, hy - ryk * .36, rx * .36, ryk * .27, -.3); ctx.fill();
+    ellipse(hx + rx * .36, hy + ryk * .34, rx * .13, rx * .13); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.75)'; ellipse(hx + rx * .1, hy - ryk * .55, rx * .07, rx * .07); ctx.fill();
+    ctx.strokeStyle = C.lash; ctx.lineWidth = 3; ellipse(ex, ey, rx, ryk); ctx.stroke();
+    ctx.restore();
+    // upper lash, clipped below the lid line
+    ctx.save();
+    ctx.beginPath();
+    const ext = (x) => topOut + (topIn - topOut) * ((x - outX) / (inX - outX));
+    const xa = ex - rx - 30, xb = ex + rx + 30;
+    ctx.moveTo(xa, ext(xa) - 2); ctx.lineTo(xb, ext(xb) - 2); ctx.lineTo(xb, ey + ryk + 40); ctx.lineTo(xa, ey + ryk + 40); ctx.closePath();
+    ctx.clip();
+    ctx.strokeStyle = C.lash; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.ellipse(ex, ey, rx + 1.5, ryk + 1.5, 0, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = C.lash; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(ex + side * rx * .92, ey - ryk * .42); ctx.lineTo(ex + side * (rx + 13), ey - ryk * .66); ctx.stroke();
+    if (st.drop > 3) {
+      ctx.lineWidth = 7;
+      const x1 = ex - rx * .95, x2 = ex + rx * .95;
+      ctx.beginPath(); ctx.moveTo(x1, ext(x1) + 6); ctx.lineTo(x2, ext(x2) + 6); ctx.stroke();
+    }
+    if (sq > 2) {
+      ctx.strokeStyle = 'rgba(185,99,46,.7)'; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.moveTo(ex - rx * .7, ey + ryk - sq * .4); ctx.quadraticCurveTo(ex, ey + ryk - sq * 1.2, ex + rx * .7, ey + ryk - sq * .4); ctx.stroke();
+    }
+  }
+
+  function draw(t, cx, cy) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const g = ctx.createRadialGradient(canvas.width * .5, canvas.height * .4, canvas.width * .02, canvas.width * .5, canvas.height * .48, canvas.width * .78);
+    g.addColorStop(0, tok.a); g.addColorStop(1, tok.b);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(S, 0, 0, S, OX, OY);
+
+    // floor shadow
+    const lift = (cy - 300) / 30;
+    ctx.fillStyle = 'rgba(30,18,60,.18)';
+    ellipse(cx, 528, 150 * (1 + st.sq * .8) * (1 + lift * .05), 18 * (1 + lift * .05)); ctx.fill();
+
+    // sound rings
+    ctx.save(); ctx.strokeStyle = tok.ring; ctx.lineWidth = 3;
+    rings = rings.filter((r0) => t - r0 < 1.6);
+    rings.forEach((r0) => { const age = (t - r0) / 1.6; ctx.globalAlpha = .26 * (1 - age); ellipse(cx, cy, 240 + age * 140, 215 + age * 140); ctx.stroke(); });
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(cx, cy + 120); ctx.rotate(st.roll); ctx.translate(-cx, -(cy + 120));
+
+    const pts = blobPoints(cx, cy);
+    drawEar(pts, cx, cy, -1, st.twL);
+    drawEar(pts, cx, cy, 1, st.twR);
+
+    // blob body
+    tracePoints(pts);
+    const bg = ctx.createRadialGradient(cx - 70 + st.yaw * 30, cy - 90, 20, cx, cy + 20, 260);
+    bg.addColorStop(0, C.furL); bg.addColorStop(.55, C.fur); bg.addColorStop(1, C.furD);
+    ctx.fillStyle = bg; ctx.fill();
+    ctx.strokeStyle = C.line; ctx.lineWidth = 4; ctx.stroke();
+
+    ctx.save();
+    tracePoints(pts); ctx.clip();
+    // gloss
+    ctx.fillStyle = 'rgba(255,255,255,.28)'; ellipse(cx - 92 + st.yaw * 20, cy - 108, 58, 26, -.45); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ellipse(cx - 128 + st.yaw * 20, cy - 92, 10, 6, -.45); ctx.fill();
+    // tabby stripes
+    const fx = cx + st.yaw * 58, fy = cy + st.pitch * 32 - st.sq * 18;
+    const top = cy - RY * (1 + st.sq) - st.sq * 30;
+    ctx.strokeStyle = C.stripe; ctx.lineCap = 'round'; ctx.globalAlpha = .65;
+    [[-40, 30, 11], [0, 44, 13], [40, 30, 11]].forEach(([dx, len, w]) => {
+      ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(fx * .55 + cx * .45 + dx, top + 8); ctx.lineTo(fx * .6 + cx * .4 + dx * .8, top + 8 + len); ctx.stroke();
+    });
+    [-1, 1].forEach((sd) => {
+      ctx.lineWidth = 8;
+      for (let k = 0; k < 2; k++) {
+        const x0 = cx + sd * (RX - 6), y0 = cy - 10 + k * 26;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 - sd * 32, y0 + 6); ctx.stroke();
+      }
+    });
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // face features
+    const sx = 1 - st.sq * .4;
+    // muzzle
+    [-1, 1].forEach((sd) => {
+      const mx = fx + sd * 24 * sx, my = fy + 62;
+      const mg = ctx.createRadialGradient(mx, my, 4, mx, my, 38);
+      mg.addColorStop(0, C.muzzle); mg.addColorStop(.75, C.muzzle); mg.addColorStop(1, 'rgba(255,242,227,0)');
+      ctx.fillStyle = mg; ellipse(mx, my, 38, 32); ctx.fill();
+    });
+    // blush
+    [-1, 1].forEach((sd) => {
+      const bx = fx + sd * 98 * sx, by = fy + 44;
+      ctx.fillStyle = `rgba(255,105,140,${.42 * st.blush})`; ellipse(bx, by, 27, 14); ctx.fill();
+      ctx.strokeStyle = `rgba(255,255,255,${.75 * st.blush})`; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+      for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(bx + k * 9 - 3, by + 5); ctx.lineTo(bx + k * 9 + 3, by - 5); ctx.stroke(); }
+    });
+    // eyes
+    const ey = fy - 12;
+    const eyeS = st.eyeS;
+    const exL = fx - 80 * sx * (1 - Math.max(0, -st.yaw) * .14), exR = fx + 80 * sx * (1 - Math.max(0, st.yaw) * .14);
+    const asymL = 1 + st.asym * -.06, asymR = 1 + st.asym * .12 + (mood === 'curious' ? .06 : 0);
+    drawEye(exL, ey, -1, 33 * eyeS * (1 - Math.max(0, -st.yaw) * .25), 41 * eyeS * (1 + st.sq * .3) * asymL);
+    drawEye(exR, ey, 1, 33 * eyeS * (1 - Math.max(0, st.yaw) * .25), 41 * eyeS * (1 + st.sq * .3) * asymR);
+
+    // nose
+    const nx = fx + st.yaw * 6, ny = fy + 44;
+    ctx.fillStyle = C.nose;
+    ctx.beginPath();
+    ctx.moveTo(nx - 12, ny - 4); ctx.quadraticCurveTo(nx, ny - 9, nx + 12, ny - 4);
+    ctx.quadraticCurveTo(nx + 7, ny + 6, nx, ny + 8); ctx.quadraticCurveTo(nx - 7, ny + 6, nx - 12, ny - 4);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.7)'; ellipse(nx - 4, ny - 3, 3.5, 2); ctx.fill();
+
+    // mouth
+    // one shared centre: the closed line sits exactly where the open mouth grows from, so the opening covers it
+    const cm = ny + 26;
+    const H = st.open * 34, mw = 10 + 13 * st.wid, mry = H * .62 + 1.5;
+    ctx.strokeStyle = C.mouthLine; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (H < 4) {
+      const sm = st.smile * (1 - H / 4);
+      ctx.globalAlpha = 1 - H / 4;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(nx - 13, cm - sm * 2);
+      ctx.quadraticCurveTo(nx, cm + sm * 2, nx + 13, cm - sm * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (H > 1) {
+      ctx.lineWidth = 3.4;
+      ctx.save();
+      ellipse(nx, cm, mw, mry);
+      ctx.fillStyle = C.cavity; ctx.fill(); ctx.clip();
+      ctx.fillStyle = C.tongue; ellipse(nx, cm + mry * .75, mw * .72, H * .38 + 1); ctx.fill();
+      if (H > 7) {
+        ctx.fillStyle = C.fang;
+        const fxp = nx - mw * .48, ft = cm - mry;
+        ctx.beginPath(); ctx.moveTo(fxp - 4, ft - 2); ctx.lineTo(fxp + 4, ft - 2); ctx.lineTo(fxp + .5, ft + 8); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      ellipse(nx, cm, mw, mry); ctx.stroke();
+    }
+
+    // whiskers
+    const wig = P.playing ? Math.sin(t * 9) * 2.5 : Math.sin(t * 1.3) * 1.2;
+    ctx.strokeStyle = C.whisker; ctx.lineWidth = 2.2;
+    [-1, 1].forEach((sd) => {
+      for (let k = 0; k < 3; k++) {
+        const x0 = fx + sd * 46 * sx, y0 = fy + 54 + k * 9;
+        const x1 = fx + sd * (172 + k * 4), y1 = fy + 34 + k * 17 + wig * (k - 1);
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 - 6, x1, y1); ctx.stroke();
+      }
+    });
+    ctx.restore();
+
+    // sparkles
+    sparks = sparks.filter((s) => t - s.t0 < 1.1);
+    sparks.forEach((s) => {
+      const age = (t - s.t0) / 1.1;
+      if (age < 0) return;
+      const r = s.d + age * 40, x = cx + Math.cos(s.a) * r, y = cy + Math.sin(s.a) * r * .9;
+      const z = s.s * Math.sin(age * Math.PI);
+      ctx.fillStyle = C.spark; ctx.globalAlpha = 1 - age * .6;
+      ctx.beginPath();
+      ctx.moveTo(x, y - z); ctx.quadraticCurveTo(x, y, x + z, y); ctx.quadraticCurveTo(x, y, x, y + z);
+      ctx.quadraticCurveTo(x, y, x - z, y); ctx.quadraticCurveTo(x, y, x, y - z); ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  /* ---------- loop ---------- */
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(.05, Math.max(0, (now - last) / 1000)); last = now;
+    const t = now / 1000;
+    const c = update(dt, t, now);
+    draw(t, c.cx, c.cy);
+    requestAnimationFrame(frame);
+  }
+  preview();
+  requestAnimationFrame(frame);
+})();
+</script>
+<script>
+/* PWA: offline support and an Install button (Chrome, Edge, Android; on iPhone use Share > Add to Home Screen) */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+(() => {
+  /* The browser only offers its own install arrow when every condition is met. This button is always
+     shown: it installs when it can, and otherwise says exactly what is in the way. */
+  let deferred = null;
+  const btn = document.getElementById('installBtn');
+  const say = (t) => { const s = document.getElementById('status'); if (s) s.textContent = t; };
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isSafariMac = /Safari/.test(ua) && !/Chrome|Chromium|Edg|OPR/.test(ua) && !isIOS;
+  const isFirefox = /Firefox/.test(ua);
+  const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const secure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (installed()) btn.hidden = true;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; btn.hidden = false; btn.textContent = 'Install app'; });
+  window.addEventListener('appinstalled', () => { btn.hidden = true; say('Tutu Cat is installed. Open it from your home screen or apps list.'); });
+  btn.addEventListener('click', async () => {
+    if (deferred) {
+      deferred.prompt();
+      try { const c = await deferred.userChoice; if (c && c.outcome === 'dismissed') say('Install cancelled. Tap Install app to try again.'); } catch (e) {}
+      deferred = null;
+      return;
+    }
+    if (installed()) { say('Tutu Cat is already installed.'); return; }
+    if (location.protocol === 'file:') { say('Opened as a file, so it cannot be installed. Upload the tutu-pwa folder to an https:// website, or run python3 -m http.server 8000 in it and open http://localhost:8000.'); return; }
+    if (!secure) { say('Installing needs a secure https:// address. Open Tutu from an https:// link.'); return; }
+    if (isIOS) { say('On iPhone and iPad: tap the Share button, then Add to Home Screen. (In Chrome on iPhone, the Share button is in the address bar.)'); return; }
+    if (isSafariMac) { say('In Safari on a Mac: choose File, then Add to Dock.'); return; }
+    if (isFirefox) { say('Firefox cannot install web apps. Open this page in Chrome or Edge, or on Android use the menu and Install.'); return; }
+    if (!('serviceWorker' in navigator)) { say('This browser cannot install web apps. Try Chrome or Edge.'); return; }
+    say('No install offer yet. Make sure this is not a private or incognito window, and that Tutu Cat is not already installed (check chrome://apps). Otherwise open the browser menu and choose Install Tutu Cat, or Cast, save and share, then Install page as app. On Android: menu, then Install app or Add to Home screen.');
+  });
+})();
+</script>
+</body>
+</html>
