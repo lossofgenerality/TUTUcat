@@ -2,7 +2,7 @@
   "name": "Tutu Cat · トゥトゥ猫",
   "short_name": "Tutu Cat",
   "description": "A squishy ginger maths cat who talks, listens and wobbles on a discrete Laplacian. From Computational Classnotes.",
-  "id": "./",
+  "id": "/tutucat/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,6 +1,6 @@
 /* Tutu Cat service worker: keeps the app working offline.
    Bump VERSION whenever you change index.html or the icons, so installed copies update. */
-const VERSION = 'tutu-v5';
+const VERSION = 'tutu-v6';
 const SHELL = [
   './',
   './index.html',
